@@ -11,7 +11,7 @@ app.secret_key = '41f4cfa3623d79af0b306d17f321d482'  # Replace with a secure key
 
 # Database Configuration
 DB_CONFIG = {
-    'host': 'localhost',
+    'host': 'host.docker.internal',
     'database': 'InventoryManagementDB',
     'user': 'root',
     'password': 'Darshan@2003'
