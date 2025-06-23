@@ -14,7 +14,7 @@ app.secret_key = '41f4cfa3623d79af0b306d17f321d482'  # Replace with a secure key
 import os
 
 DB_CONFIG = {
-    'host': 'invmgmt.mysql.pythonanywhere-services.com',
+    'host': 'retailstore1.mysql.pythonanywhere-services.com',
     'database': 'retailstore1$default',
     'user': 'retailstore1',
     'password': 'Darshan@2003'  # Change to your actual MySQL password
@@ -697,8 +697,8 @@ def pull_and_reload():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        os.system("cd /home/invmgmt/InventoryManagement && git pull")
-        os.system("touch /var/www/invmgmt_pythonanywhere_com_wsgi.py")  # reload app
+        os.system("cd /home/retailstore1/InventoryManagement && git pull")
+        os.system("touch /var/www/retailstore1_pythonanywhere_com_wsgi.py")  # reload app
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
