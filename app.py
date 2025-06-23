@@ -15,9 +15,9 @@ import os
 
 DB_CONFIG = {
     'host': 'invmgmt.mysql.pythonanywhere-services.com',
-    'database': 'invmgmt$default',
-    'user': 'invmgmt',
-    'password': 'RcbChampions@2025'  # Change to your actual MySQL password
+    'database': 'retailstore1$default',
+    'user': 'retailstore1',
+    'password': 'Darshan@2003'  # Change to your actual MySQL password
 }
 
 # --- Helper Function ---
