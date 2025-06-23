@@ -11,13 +11,11 @@ app.secret_key = '41f4cfa3623d79af0b306d17f321d482'  # Replace with a secure key
 
 
 # Database Configuration
-import os
-
 DB_CONFIG = {
-    'host': 'retailstore1.mysql.pythonanywhere-services.com',
-    'database': 'retailstore1$default',
-    'user': 'retailstore1',
-    'password': 'Darshan@2003'  # Change to your actual MySQL password
+    'host': 'retailstore.mysql.pythonanywhere-services.com',
+    'database': 'retailstore$default',
+    'user': 'retailstore',
+    'password': 'Darshan@2003'
 }
 
 # --- Helper Function ---
@@ -51,7 +49,7 @@ def login():
                 cursor.execute("SELECT username, password FROM users WHERE username = %s AND password = %s", (username, password))
                 user = cursor.fetchone()
 
-                if user:                  
+                if user:
                     # User Login
                     session['username'] = username
                     session['role'] = 'user'
@@ -339,8 +337,8 @@ def users():
 
                 # Fetch user's orders
                 cursor.execute("""
-                   SELECT o.order_date, 
-                          SUM(o.total_price) AS total_price, 
+                   SELECT o.order_date,
+                          SUM(o.total_price) AS total_price,
                           GROUP_CONCAT(CONCAT(i.name, ' (', o.quantity, ')') SEPARATOR ', ') AS ordered_items
                    FROM orders o
                    JOIN items i ON o.item_id = i.id
@@ -394,8 +392,8 @@ def chatbot():
         if user_message == 'last_order':
             # Fetch the last order
             cursor.execute("""
-                SELECT o.order_date, 
-                       MAX(o.total_price) AS total_price, 
+                SELECT o.order_date,
+                       MAX(o.total_price) AS total_price,
                        GROUP_CONCAT(CONCAT(i.name, ' (', o.quantity, ')') SEPARATOR ', ') AS item_details
                 FROM orders o
                 JOIN items i ON o.item_id = i.id
@@ -414,8 +412,8 @@ def chatbot():
         elif user_message == 'last_5_orders':
             # Fetch the last 5 orders
             cursor.execute("""
-                SELECT o.order_date, 
-                       MAX(o.total_price) AS total_price, 
+                SELECT o.order_date,
+                       MAX(o.total_price) AS total_price,
                        GROUP_CONCAT(CONCAT(i.name, ' (', o.quantity, ')') SEPARATOR ', ') AS ordered_items
                 FROM orders o
                 JOIN items i ON o.item_id = i.id
@@ -466,7 +464,7 @@ def chatbot():
 def add_to_cart():
     if session.get('role') != 'user':
         return jsonify({'message': 'Unauthorized'}), 401
-    
+
     data = request.json
     item_id = int(data['id'])
     action = data['action']  # "increase" or "decrease"
@@ -533,9 +531,9 @@ def checkout():
             cursor = connection.cursor(dictionary=True)
 
             # Fetch all cart items for the user, including image URLs
-            cursor.execute(""" 
-                SELECT c.item_id, c.quantity, i.name, i.price, i.image_url 
-                FROM cart c 
+            cursor.execute("""
+                SELECT c.item_id, c.quantity, i.name, i.price, i.image_url
+                FROM cart c
                 JOIN items i ON c.item_id = i.id
                 WHERE c.user_id = %s
             """, (username,))
@@ -668,7 +666,7 @@ def cart():
 
             # Fetch updated cart details
             cursor.execute("""
-                SELECT c.item_id, i.name, i.quantity AS stock, i.image_url, i.price, c.quantity AS cart_quantity 
+                SELECT c.item_id, i.name, i.quantity AS stock, i.image_url, i.price, c.quantity AS cart_quantity
                 FROM cart c
                 JOIN items i ON c.item_id = i.id
                 WHERE c.user_id = %s
@@ -690,17 +688,28 @@ def cart():
 
     return render_template('kart.html', cart=cart_items, total=total, stock_error=stock_error)
 
-@app.route('/pull_and_reload', methods=['POST'])
+
+# Use the token from .env
+from config import PYTHONANYWHERE_CICD_TOKEN as CICD_TOKEN
+
+
+@app.route("/pull_and_reload", methods=["POST"])
 def pull_and_reload():
     token = request.headers.get("X-Auth-Token")
-    if token != os.environ.get("CI_CD_TOKEN"):
+    expected_token = os.getenv("PYTHONANYWHERE_CICD_TOKEN")
+
+    if token != expected_token:
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        os.system("cd /home/retailstore1/InventoryManagement && git pull")
-        os.system("touch /var/www/retailstore1_pythonanywhere_com_wsgi.py")  # reload app
-        return jsonify({"status": "success"})
-    except Exception as e:
+        # Pull latest code
+        subprocess.run(["git", "-C", "/home/retailstore/InventoryManagement", "pull"], check=True)
+
+        # Reload the web app
+        subprocess.run(["touch", "/var/www/retailstore_pythonanywhere_com_wsgi.py"], check=True)
+
+        return jsonify({"message": "Pulled and reloaded successfully"}), 200
+    except subprocess.CalledProcessError as e:
         return jsonify({"error": str(e)}), 500
 
 # 6. Logout Route
@@ -711,5 +720,4 @@ def logout():
 
 # --- Run Application ---
 if __name__ == '__main__':
-   app.run(host='0.0.0.0', port=5000, debug=True)
-
+    app.run(host='0.0.0.0', port=5000, debug=True)
