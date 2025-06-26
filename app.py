@@ -1,16 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import mysql.connector
 from mysql.connector import Error
-import random
-import pymysql
 import os
 import subprocess
-
-
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = '41f4cfa3623d79af0b306d17f321d482'  # Replace with a secure key
-
 
 # Database Configuration
 DB_CONFIG = {
@@ -19,6 +15,15 @@ DB_CONFIG = {
     'user': 'retailstore',
     'password': 'Darshan@2003'
 }
+
+# Define constants to avoid duplication
+LOGIN_TEMPLATE = 'login.html'
+REGISTER_TEMPLATE = 'register.html'
+ADMIN_TEMPLATE = 'admin.html'
+USER_TEMPLATE = 'user.html'
+SUCCESS_TEMPLATE = 'success.html'
+CART_TEMPLATE = 'kart.html'
+ERROR_TEMPLATE = 'error.html'
 
 # --- Helper Function ---
 def get_db_connection():
@@ -39,7 +44,7 @@ def login():
         password = request.form.get('password', '').strip()
 
         if not username or not password:
-            return render_template('login.html', error="Username and password are required")
+            return render_template(LOGIN_TEMPLATE, error="Username and password are required")
 
         # Admin hardcoded login
         if username == 'admin' and password == 'admin123':
@@ -50,7 +55,7 @@ def login():
         # Connect to MySQL DB
         connection = get_db_connection()
         if not connection:
-            return render_template('login.html', error="Database connection error")
+            return render_template(LOGIN_TEMPLATE, error="Database connection error")
 
         try:
             cursor = connection.cursor(dictionary=True)
@@ -65,19 +70,18 @@ def login():
                 session['role'] = 'user'
                 return redirect(url_for('users'))
             else:
-                return render_template('login.html', error="Invalid username or password")
+                return render_template(LOGIN_TEMPLATE, error="Invalid username or password")
 
         except Exception as e:
             print(f"[ERROR - Login] {e}")
-            return render_template('login.html', error="Something went wrong. Try again.")
+            return render_template(LOGIN_TEMPLATE, error="Something went wrong. Try again.")
         finally:
             cursor.close()
             connection.close()
 
-    return render_template('login.html')
+    return render_template(LOGIN_TEMPLATE)
 
-
-# Registration Route with OTP Verification
+# Registration Route
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -88,32 +92,32 @@ def register():
 
         # Input validations
         if len(username.strip()) == 0:
-            return render_template('register.html', error="Username cannot be empty.")
+            return render_template(REGISTER_TEMPLATE, error="Username cannot be empty.")
         if len(password) < 8:
-            return render_template('register.html', error="Password must be at least 8 characters long.")
+            return render_template(REGISTER_TEMPLATE, error="Password must be at least 8 characters long.")
         if '@' not in email:
-            return render_template('register.html', error="Invalid email address.")
+            return render_template(REGISTER_TEMPLATE, error="Invalid email address.")
         if not mobile.isdigit() or len(mobile) < 10:
-            return render_template('register.html', error="Invalid mobile number.")
+            return render_template(REGISTER_TEMPLATE, error="Invalid mobile number.")
 
         connection = get_db_connection()
         if connection:
             try:
                 cursor = connection.cursor()
 
-                # ✅ Check if username exists — consume result
+                # Check if username exists
                 cursor.execute("SELECT 1 FROM users WHERE username = %s", (username,))
                 existing_user = cursor.fetchone()
                 if existing_user:
-                    return render_template('register.html', error="Username already exists.")
+                    return render_template(REGISTER_TEMPLATE, error="Username already exists.")
 
-                # ✅ Check if mobile exists — consume result
+                # Check if mobile exists
                 cursor.execute("SELECT 1 FROM users WHERE mobile = %s", (mobile,))
                 existing_mobile = cursor.fetchone()
                 if existing_mobile:
-                    return render_template('register.html', error="Mobile number already exists.")
+                    return render_template(REGISTER_TEMPLATE, error="Mobile number already exists.")
 
-                # ✅ Proceed with insertion
+                # Insert new user
                 cursor.execute(
                     "INSERT INTO users (username, password, email, mobile) VALUES (%s, %s, %s, %s)",
                     (username, password, email, mobile)
@@ -124,23 +128,16 @@ def register():
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                return render_template('register.html', error="Registration failed. See logs.")
+                return render_template(REGISTER_TEMPLATE, error="Registration failed. See logs.")
             finally:
-                try:
-                    cursor.close()
-                except Exception as e:
-                    print(f"[WARN] Cursor close failed: {e}")
+                cursor.close()
                 connection.close()
         else:
-            return render_template('register.html', error="Database connection failed.")
+            return render_template(REGISTER_TEMPLATE, error="Database connection failed.")
 
-    return render_template('register.html')
+    return render_template(REGISTER_TEMPLATE)
 
-
-
-
-
-# 2. Admin Route - Admin Dashboard (Add, Remove, and Restock items)
+# 2. Admin Route - Admin Dashboard
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if session.get('role') != 'admin':
@@ -162,7 +159,7 @@ def admin():
                     name = request.form['name']
                     price = float(request.form['price'])
                     quantity = int(request.form['quantity'])
-                    category = request.form['category']  # Get the category
+                    category = request.form['category']
                     image_url = request.form['image_url']
                     cursor.execute(
                         "INSERT INTO items (name, price, quantity, category, image_url) VALUES (%s, %s, %s, %s, %s)",
@@ -185,17 +182,20 @@ def admin():
                         (restock_quantity, item_id)
                     )
                     connection.commit()
+
+            # Fetch items for display
+            cursor.execute("SELECT id, name, price, quantity, category, image_url FROM items")
+            items = cursor.fetchall()
+
         except Exception as e:
             print(f"Error: {e}")
         finally:
             cursor.close()
             connection.close()
 
-    return render_template('admin.html', items=items, orders=orders)
+    return render_template(ADMIN_TEMPLATE, items=items, orders=orders)
 
-  # Renders the admin panel
-
-# Separate Route for Listing Items
+# Admin Items List
 @app.route('/admin/items', methods=['GET'])
 def admin_list_items():
     if session.get('role') != 'admin':
@@ -212,7 +212,8 @@ def admin_list_items():
             cursor.close()
             connection.close()
 
-    return render_template('list_items.html', items=items)  # Pass the items list to template
+    return render_template('list_items.html', items=items)
+
 @app.route('/admin/orders')
 def admin_orders():
     if session.get('role') != 'admin':
@@ -220,13 +221,13 @@ def admin_orders():
 
     connection = get_db_connection()
     orders = []
-    total_value = 0  # Initialize total value
+    total_value = 0
 
     if connection:
         try:
             cursor = connection.cursor(dictionary=True)
 
-            # Fetch orders grouped by order_date and user_id, including item details
+            # Fetch orders grouped by order_date and user_id
             query = """
                 SELECT o.user_id, o.order_date, SUM(o.total_price) AS total_price,
                        GROUP_CONCAT(CONCAT(i.name, ' (ID:', o.item_id, ', Qty:', o.quantity, ')') SEPARATOR ', ') AS ordered_items
@@ -238,7 +239,7 @@ def admin_orders():
             cursor.execute(query)
             orders = cursor.fetchall()
 
-            # Calculate the total value of all orders
+            # Calculate total value
             total_value_query = "SELECT SUM(total_price) AS total_value FROM orders"
             cursor.execute(total_value_query)
             total_value_result = cursor.fetchone()
@@ -251,7 +252,8 @@ def admin_orders():
             cursor.close()
             connection.close()
 
-    return render_template('admin_oders.html', orders=orders, total_value=total_value)
+    return render_template('admin_orders.html', orders=orders, total_value=total_value)
+
 @app.route('/admin/suggestions', methods=['GET', 'POST'])
 def admin_suggestions():
     if session.get('role') != 'admin':
@@ -270,7 +272,6 @@ def admin_suggestions():
         if item_id and quantity:
             try:
                 cursor = connection.cursor()
-                # Update the item stock
                 cursor.execute(
                     "UPDATE items SET quantity = quantity + %s WHERE id = %s",
                     (quantity, item_id)
@@ -296,8 +297,8 @@ def admin_suggestions():
             all_items = cursor.fetchall()
 
             # Separate most ordered and least ordered
-            most_ordered = all_items[:5]  # Top 5 most ordered items
-            least_ordered = all_items[-5:]  # Bottom 5 least ordered items
+            most_ordered = all_items[:5]
+            least_ordered = all_items[-5:]
 
             # Fetch items that are not ordered
             not_ordered_query = """
@@ -307,9 +308,6 @@ def admin_suggestions():
             """
             cursor.execute(not_ordered_query)
             not_ordered = cursor.fetchall()
-
-            # Debugging print
-            print("Not Ordered Items:", not_ordered)
 
         except Exception as e:
             print(f"Error fetching suggestions: {e}")
@@ -331,88 +329,77 @@ def users():
         return redirect(url_for('login'))
 
     connection = get_db_connection()
-    items = []  # Product items
-    orders = []  # User orders
-    user_data = {"username": "Guest", "email": "-", "mobile": "-"}  # Default user data
+    items = []
+    orders = []
+    user_data = {"username": "Guest", "email": "-", "mobile": "-"}
 
     if connection:
         try:
             cursor = connection.cursor(dictionary=True)
 
-            # Fetch user details using username stored in session
-            username = session.get('username')  # Assuming 'username' is stored in session
-            assert username, "Session must have a valid username"
-
+            # Fetch user details
+            username = session.get('username')
             if username:
                 cursor.execute("SELECT username, email, mobile FROM users WHERE username = %s", (username,))
                 user = cursor.fetchone()
-                assert user, f"User with username '{username}' must exist in the database"
+                
+                if user:
+                    user_data = {
+                        "username": user['username'],
+                        "email": user['email'],
+                        "mobile": user['mobile']
+                    }
 
-                user_data = {
-                    "username": user['username'],
-                    "email": user['email'],
-                    "mobile": user['mobile']
-                }
-
-                # Fetch user's orders
-                cursor.execute("""
-                   SELECT o.order_date,
-                          SUM(o.total_price) AS total_price,
-                          GROUP_CONCAT(CONCAT(i.name, ' (', o.quantity, ')') SEPARATOR ', ') AS ordered_items
-                   FROM orders o
-                   JOIN items i ON o.item_id = i.id
-                   WHERE o.user_id = %s
-                   GROUP BY o.order_date
-                   ORDER BY o.order_date DESC
-                """, (username,))
-                orders = cursor.fetchall()
-                assert orders is not None, "Orders must be fetched without errors"
+                    # Fetch user's orders
+                    cursor.execute("""
+                       SELECT o.order_date,
+                              SUM(o.total_price) AS total_price,
+                              GROUP_CONCAT(CONCAT(i.name, ' (', o.quantity, ')') SEPARATOR ', ') AS ordered_items
+                       FROM orders o
+                       JOIN items i ON o.item_id = i.id
+                       WHERE o.user_id = %s
+                       GROUP BY o.order_date
+                       ORDER BY o.order_date DESC
+                    """, (username,))
+                    orders = cursor.fetchall() or []
 
             # Fetch product items
             cursor.execute("SELECT id, name, category, price, quantity, image_url FROM items")
-            items = cursor.fetchall()
-            assert items is not None, "Product items must be fetched without errors"
+            items = cursor.fetchall() or []
 
-        except AssertionError as ae:
-            print(f"Assertion Error: {ae}")
-            return render_template('error.html', message=str(ae))
         except Exception as e:
             print(f"Error: {e}")
-            return render_template('error.html', message="An unexpected error occurred. Please try again later.")
+            return render_template(ERROR_TEMPLATE, message="An unexpected error occurred. Please try again later.")
         finally:
             cursor.close()
             connection.close()
 
-    return render_template('user.html', items=items, orders=orders, user=user_data)
-
-from flask import jsonify
+    return render_template(USER_TEMPLATE, items=items, orders=orders, user=user_data)
 
 @app.route('/chatbot', methods=['POST'])
 def chatbot():
     if 'username' not in session:
         return jsonify({"error": "User not logged in"}), 401
 
-    # Get the username from the session
     username = session['username']
-    connection = get_db_connection()
-
-    if not connection:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    # Parse the chatbot request
-    data = request.get_json()
-    user_message = data.get('message', '').lower()
-
     response = {"message": "I'm sorry, I didn't understand that. Please try again!"}
+    cursor = None
+    connection = None
 
     try:
+        connection = get_db_connection()
+        if not connection:
+            raise Exception("Database connection failed")
+
+        data = request.get_json()
+        user_message = data.get('message', '').lower()
+
         cursor = connection.cursor(dictionary=True)
 
         if user_message == 'last_order':
-            # Fetch the last order
             cursor.execute("""
                 SELECT o.order_date,
-                       MAX(o.total_price) AS total_price,
+                       SUM(o.total_price) AS total_price,
                        GROUP_CONCAT(CONCAT(i.name, ' (', o.quantity, ')') SEPARATOR ', ') AS item_details
                 FROM orders o
                 JOIN items i ON o.item_id = i.id
@@ -424,15 +411,17 @@ def chatbot():
             last_order = cursor.fetchone()
 
             if last_order:
-                response["message"] = f"Last Order:\nDate: {last_order['order_date']}, Total: ₹{last_order['total_price']}, Items: {last_order['item_details']}"
+                response["message"] = (
+                    f"Last Order:\nDate: {last_order['order_date']}, "
+                    f"Total: ₹{last_order['total_price']}, Items: {last_order['item_details']}"
+                )
             else:
                 response["message"] = "You have no orders yet."
 
         elif user_message == 'last_5_orders':
-            # Fetch the last 5 orders
             cursor.execute("""
                 SELECT o.order_date,
-                       MAX(o.total_price) AS total_price,
+                       SUM(o.total_price) AS total_price,
                        GROUP_CONCAT(CONCAT(i.name, ' (', o.quantity, ')') SEPARATOR ', ') AS ordered_items
                 FROM orders o
                 JOIN items i ON o.item_id = i.id
@@ -452,7 +441,6 @@ def chatbot():
                 response["message"] = "You have no orders yet."
 
         elif user_message == 'total_amount_spent':
-            # Fetch total amount spent
             cursor.execute("""
                 SELECT SUM(total_price) AS total_spent
                 FROM orders
@@ -460,17 +448,23 @@ def chatbot():
             """, (username,))
             total_spent = cursor.fetchone()
 
-            response["message"] = f"Total Amount Spent: ₹{total_spent['total_spent']}" if total_spent and total_spent['total_spent'] else "You have not spent anything yet."
+            response["message"] = (
+                f"Total Amount Spent: ₹{total_spent['total_spent']}"
+                if total_spent and total_spent['total_spent']
+                else "You have not spent anything yet."
+            )
 
         elif user_message == 'other':
-            # Provide additional help options
-            response["message"] = "Here are additional options you can ask:\n- 'Last Order'\n- 'Last 5 Orders'\n- 'Total Amount Spent'\nPlease specify what you need help with!"
+            response["message"] = (
+                "Here are additional options you can ask:\n"
+                "- 'Last Order'\n- 'Last 5 Orders'\n- 'Total Amount Spent'\n"
+                "Please specify what you need help with!"
+            )
 
     except Exception as e:
-        # Handle unexpected errors and provide details for debugging
         response = {"message": f"An error occurred: {str(e)}"}
+
     finally:
-        # Ensure the cursor and connection are properly closed
         if cursor:
             cursor.close()
         if connection:
@@ -486,7 +480,7 @@ def add_to_cart():
 
     data = request.json
     item_id = int(data['id'])
-    action = data['action']  # "increase" or "decrease"
+    action = data['action']
     username = session['username']
 
     connection = get_db_connection()
@@ -501,7 +495,7 @@ def add_to_cart():
             if not item:
                 return jsonify({'message': 'Item not found'}), 404
 
-            # Check if item already exists in the user's cart
+            # Check if item already exists in cart
             cursor.execute("SELECT quantity FROM cart WHERE user_id = %s AND item_id = %s", (username, item_id))
             cart_item = cursor.fetchone()
 
@@ -523,21 +517,22 @@ def add_to_cart():
                     cursor.execute("DELETE FROM cart WHERE user_id = %s AND item_id = %s", (username, item_id))
 
             connection.commit()
-           # return jsonify({'message': 'Cart updated successfully'})
+            return jsonify({'message': 'Cart updated successfully'})
+        except Exception as e:
+            print(f"Error updating cart: {e}")
+            return jsonify({'message': 'Error updating cart'}), 500
         finally:
             cursor.close()
             connection.close()
 
     return jsonify({'message': 'Database error'}), 500
 
-from datetime import datetime
-
 @app.route('/checkout', methods=['POST'])
 def checkout():
     print("Processing Checkout...")
     print("Session data:", session)
 
-    username = session.get('username')  # Fetch username from session
+    username = session.get('username')
 
     if not username:
         print("User is not logged in.")
@@ -549,7 +544,7 @@ def checkout():
         try:
             cursor = connection.cursor(dictionary=True)
 
-            # Fetch all cart items for the user, including image URLs
+            # Fetch cart items
             cursor.execute("""
                 SELECT c.item_id, c.quantity, i.name, i.price, i.image_url
                 FROM cart c
@@ -569,6 +564,7 @@ def checkout():
                 item_id = item['item_id']
                 quantity = item['quantity']
                 price = item['price']
+                total_price = quantity * price
 
                 print(f"Processing item {item_id} with quantity {quantity}.")
 
@@ -582,22 +578,22 @@ def checkout():
                     connection.rollback()
                     return jsonify({'message': f"Insufficient stock for item {item_id}"}), 400
 
-                # Add to orders table using `username` for user_id
+                # Add to orders table
                 order_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 cursor.execute("""
-                    INSERT INTO orders (user_id, item_id, quantity, price, order_date)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (username, item_id, quantity, price, order_date))
+                    INSERT INTO orders (user_id, item_id, quantity, price, total_price, order_date)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (username, item_id, quantity, price, total_price, order_date))
 
             # Clear the cart
             cursor.execute("DELETE FROM cart WHERE user_id = %s", (username,))
             connection.commit()
 
-            # Calculate total price for the success page
+            # Calculate total price
             total_price = sum(item['quantity'] * item['price'] for item in cart_items)
 
             print("Checkout completed successfully.")
-            return render_template('success.html', cart=cart_items, total=total_price, username=username)
+            return render_template(SUCCESS_TEMPLATE, cart=cart_items, total=total_price, username=username)
 
         except Exception as e:
             print(f"Error during checkout: {e}")
@@ -612,7 +608,6 @@ def checkout():
     return jsonify({'message': 'Database error during checkout'}), 500
 
 # 5. Cart Route
-
 @app.route('/cart', methods=['GET', 'POST'])
 def cart():
     if 'role' not in session or session['role'] != 'user':
@@ -621,32 +616,31 @@ def cart():
     username = session['username']
     cart_items = []
     total = 0
-    stock_error = False  # Flag to track insufficient stock
+    stock_error = False
 
     connection = get_db_connection()
     if connection:
         try:
             cursor = connection.cursor(dictionary=True)
 
-            # Handle quantity update if this is a POST request
+            # Handle quantity update
             if request.method == 'POST':
                 data = request.form
                 item_id = data.get('item_id')
                 action = data.get('action')
 
-                # Validate inputs
                 if not action or not item_id:
-                    print("Error: Missing action or item ID.")  # Log the error
-                    return redirect(url_for('cart'))  # Redirect back to the cart
+                    print("Error: Missing action or item ID.")
+                    return redirect(url_for('cart'))
 
                 try:
                     item_id = int(item_id)
                 except ValueError:
-                    print("Error: Invalid item ID.")  # Log the error
+                    print("Error: Invalid item ID.")
                     return redirect(url_for('cart'))
 
                 if action not in ['increase', 'decrease']:
-                    print("Error: Invalid action.")  # Log the error
+                    print("Error: Invalid action.")
                     return redirect(url_for('cart'))
 
                 # Fetch item details
@@ -654,10 +648,10 @@ def cart():
                 item = cursor.fetchone()
 
                 if not item:
-                    print("Error: Item not found.")  # Log the error
+                    print("Error: Item not found.")
                     return redirect(url_for('cart'))
 
-                # Fetch cart details for the user
+                # Fetch cart details
                 cursor.execute("SELECT quantity FROM cart WHERE user_id = %s AND item_id = %s", (username, item_id))
                 cart_item = cursor.fetchone()
 
@@ -668,7 +662,7 @@ def cart():
                             cursor.execute("UPDATE cart SET quantity = %s WHERE user_id = %s AND item_id = %s",
                                            (new_quantity, username, item_id))
                         else:
-                            print("Error: Not enough stock available.")  # Log the error
+                            print("Error: Not enough stock available.")
                     else:
                         cursor.execute("INSERT INTO cart (user_id, item_id, quantity) VALUES (%s, %s, %s)",
                                        (username, item_id, 1))
@@ -692,7 +686,7 @@ def cart():
             """, (username,))
             cart_items = cursor.fetchall()
 
-            # Check stock availability and calculate the total price
+            # Check stock and calculate total
             for item in cart_items:
                 if item['cart_quantity'] > item['stock']:
                     item['stock_error'] = True
@@ -701,16 +695,13 @@ def cart():
                     item['stock_error'] = False
                 total += item['price'] * item['cart_quantity']
 
+        except Exception as e:
+            print(f"Error in cart: {e}")
         finally:
             cursor.close()
             connection.close()
 
-    return render_template('kart.html', cart=cart_items, total=total, stock_error=stock_error)
-
-
-# Use the token from .env
-from config import PYTHONANYWHERE_CICD_TOKEN as CICD_TOKEN
-
+    return render_template(CART_TEMPLATE, cart=cart_items, total=total, stock_error=stock_error)
 
 @app.route("/pull_and_reload", methods=["POST"])
 def pull_and_reload():
