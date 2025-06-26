@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #f3e5e5, #ffffff);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: #2d89e6;
+            color: white;
+            padding: 15px 20px;
+            font-size: 24px;
+            text-transform: uppercase;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-buttons a {
+            padding: 10px 15px;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            font-size: 14px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .nav-buttons a:first-child {
+            background-color: #1E90FF; /* Blue for Inventory */
+            color: white;
+        }
+
+        .nav-buttons a:first-child:hover {
+            background-color: #0056b3;
+        }
+
+        .nav-buttons a:nth-child(2) {
+            background-color: #FFD700; /* Gold for Orders */
+            color: black;
+        }
+
+        .nav-buttons a:nth-child(2):hover {
+            background-color: #FFB300;
+        }
+
+        .nav-buttons a:nth-child(3) {
+            background-color: #32CD32; /* Lime Green for Suggestions */
+            color: white;
+        }
+
+        .nav-buttons a:nth-child(3):hover {
+            background-color: #228B22;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            margin: 30px;
+        }
+
+        .form-box {
+            background-color: #fff;
+            border-radius: 10px;
+            padding: 20px 30px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        h2 {
+            color: #007BFF;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        label {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus {
+            border-color: #007BFF;
+        }
+
+        button {
+            padding: 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            display: block;
+            margin: 10px auto 0;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button.delete {
+            background-color: #dc3545;
+        }
+
+        button.delete:hover {
+            background-color: #c82333;
+        }
+
+        a.logout-button {
+            text-align: center;
+            margin: 20px auto;
+            width: 220px;
+            padding: 10px;
+            background-color: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+            text-transform: uppercase;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s ease;
+            display: block;
+        }
+
+        a.logout-button:hover {
+            background-color: #c82333;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <span>Admin Panel - Inventory Manager</span>
+        <div class="nav-buttons">
+            <a href="{{ url_for('admin_list_items') }}" class="list-button">Inventory</a>
+            <a href="{{ url_for('admin_orders') }}" class="list-button">Orders</a>
+            <a href="{{ url_for('admin_suggestions') }}" class="list-button">Suggestions</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Add Item Section -->
+        <div class="form-box add-item">
+            <h2>Add Item</h2>
+            <form method="POST">
+                <input type="hidden" name="action" value="add">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" required>
+
+                <label for="price">Price:</label>
+                <input type="number" id="price" name="price" step="0.01" required>
+
+                <label for="quantity">Quantity:</label>
+                <input type="number" id="quantity" name="quantity" required>
+
+                <label for="category">Category:</label>
+                <input type="text" id="category" name="category" required>
+
+                <label for="image_url">Image URL:</label>
+                <input type="text" id="image_url" name="image_url">
+
+                <button type="submit">Add Item</button>
+            </form>
+        </div>
+
+        <!-- Restock Item Section -->
+        <div class="form-box restock-item">
+            <h2>Restock Item</h2>
+            <form method="POST" action="/admin">
+                <input type="hidden" name="action" value="restock">
+                <label>Product ID:</label>
+                <input type="number" name="item_id" required>
+
+                <label>Restock Quantity:</label>
+                <input type="number" name="quantity" min="1" required>
+
+                <button type="submit">Restock Product</button>
+            </form>
+        </div>
+
+        <!-- Delete Item Section -->
+        <div class="form-box delete-item">
+            <h2>Delete Item</h2>
+            <form method="POST" action="/admin">
+                <input type="hidden" name="action" value="delete">
+                <label>Product ID:</label>
+                <input type="number" name="item_id" required>
+                <button type="submit" class="delete">Delete Product</button>
+            </form>
+        </div>
+    </div>
+
+    <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+</body>
+</html>
