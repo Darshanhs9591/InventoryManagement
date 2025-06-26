@@ -4,6 +4,8 @@ from mysql.connector import Error
 import random
 import pymysql
 import os
+import subprocess
+
 
 
 app = Flask(__name__)
@@ -33,39 +35,44 @@ def get_db_connection():
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
 
+        if not username or not password:
+            return render_template('login.html', error="Username and password are required")
+
+        # Admin hardcoded login
+        if username == 'admin' and password == 'admin123':
+            session['username'] = 'admin'
+            session['role'] = 'admin'
+            return redirect(url_for('admin'))
+
+        # Connect to MySQL DB
         connection = get_db_connection()
-        if connection:
-            if username == 'admin' and password == 'admin123':
-                        session['role'] = 'admin'
-                        return redirect(url_for('admin'))
+        if not connection:
+            return render_template('login.html', error="Database connection error")
 
-            try:
-                cursor = connection.cursor(dictionary=True)
+        try:
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT username, password FROM users
+                WHERE username = %s AND password = %s
+            """, (username, password))
+            user = cursor.fetchone()
 
-                # Check if the user exists and validate the password
-                cursor.execute("SELECT username, password FROM users WHERE username = %s AND password = %s", (username, password))
-                user = cursor.fetchone()
+            if user:
+                session['username'] = username
+                session['role'] = 'user'
+                return redirect(url_for('users'))
+            else:
+                return render_template('login.html', error="Invalid username or password")
 
-                if user:
-                    # User Login
-                    session['username'] = username
-                    session['role'] = 'user'
-                    return redirect(url_for('users'))
-                else:
-                    # Invalid username or password
-                    return render_template('login.html', error="Invalid username or password")
-
-            except Exception as e:
-                print(f"Error: {e}")
-                return render_template('login.html', error="An error occurred. Please try again.")
-            finally:
-                cursor.close()
-                connection.close()
-
-        return render_template('login.html', error="Database connection error")
+        except Exception as e:
+            print(f"[ERROR - Login] {e}")
+            return render_template('login.html', error="Something went wrong. Try again.")
+        finally:
+            cursor.close()
+            connection.close()
 
     return render_template('login.html')
 
@@ -79,7 +86,7 @@ def register():
         email = request.form['email']
         mobile = request.form['mobile']
 
-        # Validate inputs before sending to the database
+        # Input validations
         if len(username.strip()) == 0:
             return render_template('register.html', error="Username cannot be empty.")
         if len(password) < 8:
@@ -87,38 +94,50 @@ def register():
         if '@' not in email:
             return render_template('register.html', error="Invalid email address.")
         if not mobile.isdigit() or len(mobile) < 10:
-            return render_template('register.html', error="Invalid mobile number. Must be numeric and at least 10 digits.")
+            return render_template('register.html', error="Invalid mobile number.")
 
         connection = get_db_connection()
         if connection:
             try:
                 cursor = connection.cursor()
 
-                # Insert user into the database
+                # ✅ Check if username exists — consume result
+                cursor.execute("SELECT 1 FROM users WHERE username = %s", (username,))
+                existing_user = cursor.fetchone()
+                if existing_user:
+                    return render_template('register.html', error="Username already exists.")
+
+                # ✅ Check if mobile exists — consume result
+                cursor.execute("SELECT 1 FROM users WHERE mobile = %s", (mobile,))
+                existing_mobile = cursor.fetchone()
+                if existing_mobile:
+                    return render_template('register.html', error="Mobile number already exists.")
+
+                # ✅ Proceed with insertion
                 cursor.execute(
                     "INSERT INTO users (username, password, email, mobile) VALUES (%s, %s, %s, %s)",
                     (username, password, email, mobile)
                 )
                 connection.commit()
                 return redirect(url_for('login'))
-            except pymysql.MySQLError as e:
-                # Map specific database errors to user-friendly messages
-                error_message = str(e)
-                if "Duplicate entry" in error_message and "for key 'username'" in error_message:
-                    return render_template('register.html', error="Username already exists.")
-                elif "Duplicate entry" in error_message and "for key 'mobile'" in error_message:
-                    return render_template('register.html', error="Mobile number already exists.")
-                elif "Password must be at least 8 characters long." in error_message:
-                    return render_template('register.html', error="Password must be at least 8 characters long.")
-                else:
-                    return render_template('register.html', error="Registration failed. Please try again.")
+
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return render_template('register.html', error="Registration failed. See logs.")
             finally:
-                cursor.close()
+                try:
+                    cursor.close()
+                except Exception as e:
+                    print(f"[WARN] Cursor close failed: {e}")
                 connection.close()
         else:
             return render_template('register.html', error="Database connection failed.")
 
     return render_template('register.html')
+
+
+
 
 
 # 2. Admin Route - Admin Dashboard (Add, Remove, and Restock items)
